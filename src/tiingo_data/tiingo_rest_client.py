@@ -82,6 +82,7 @@ class TiingoRESTClient:
         session: requests.Session | None = None,
         strict: bool = False,
     ) -> None:
+        """Configure the HTTP session and optionally validate the API token."""
         if not isinstance(token, str) or not token.strip():
             raise ValueError("token must be a non-empty string")
         if isinstance(timeout, tuple):
@@ -113,6 +114,7 @@ class TiingoRESTClient:
 
     @classmethod
     def _create_session(cls, retries: int) -> requests.Session:
+        """Create a session with retries for transient HTTPS GET failures."""
         retry_policy = Retry(
             total=retries,
             connect=retries,
@@ -130,9 +132,11 @@ class TiingoRESTClient:
         return session
 
     def __repr__(self) -> str:
+        """Return a client representation without credentials."""
         return "<TiingoRESTClient(https://api.tiingo.com)>"
 
     def __enter__(self) -> Self:
+        """Return the client for use in a with block."""
         return self
 
     def __exit__(
@@ -141,6 +145,7 @@ class TiingoRESTClient:
         exc_value: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
+        """Close the owned session when leaving a with block."""
         self.close()
 
     def close(self) -> None:
@@ -149,6 +154,7 @@ class TiingoRESTClient:
             self._session.close()
 
     def _redact(self, value: object) -> str:
+        """Convert a value to text and mask any occurrences of the token."""
         return str(value).replace(self._token, "<redacted>")
 
     def _get(
@@ -158,6 +164,7 @@ class TiingoRESTClient:
         params: Mapping[str, str] | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> requests.Response:
+        """Send a GET request and translate request failures to TiingoError."""
         try:
             response = self._session.get(
                 url,
@@ -190,6 +197,7 @@ class TiingoRESTClient:
         params: Mapping[str, str] | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> JSON:
+        """Fetch a JSON object or array, rejecting other response shapes."""
         response = self._get(url, params=params, headers=headers)
         try:
             payload = response.json()
@@ -202,6 +210,7 @@ class TiingoRESTClient:
         return payload
 
     def _validate_token(self) -> None:
+        """Check that Tiingo's authentication endpoint confirms the token."""
         payload = self._get_json(
             self._AUTH_TEST_URL,
             headers={"Content-Type": "application/json"},
@@ -215,6 +224,7 @@ class TiingoRESTClient:
 
     @staticmethod
     def _is_valid_date(str_date: str) -> bool:
+        """Accept a YYYY-MM-DD date or an empty string for an omitted bound."""
         if str_date == "":
             return True
         try:
@@ -224,6 +234,7 @@ class TiingoRESTClient:
 
     @staticmethod
     def _normalize_tickers(tickers: str | Sequence[str]) -> list[str]:
+        """Return a list of tickers after validating each value."""
         if isinstance(tickers, str):
             normalized = [tickers]
         else:
@@ -250,6 +261,7 @@ class TiingoRESTClient:
     def _validate_cols(
         self, endpoint: str, columns: Sequence[str] | None
     ) -> list[str]:
+        """Filter endpoint columns, raising in strict mode for invalid names."""
         if not columns:
             return []
         if isinstance(columns, str):
@@ -282,11 +294,13 @@ class TiingoRESTClient:
 
     @staticmethod
     def _empty_historical(columns: Sequence[str]) -> pd.DataFrame:
+        """Build an empty historical result with its named ticker/date index."""
         index = pd.MultiIndex.from_arrays([[], []], names=["ticker", "date"])
         return pd.DataFrame(columns=list(columns), index=index)
 
     @staticmethod
     def _historical_frame(payload: JSON, ticker: str) -> pd.DataFrame:
+        """Parse one ticker's historical records into a UTC-indexed frame."""
         if not isinstance(payload, list) or not all(
             isinstance(record, dict) for record in payload
         ):
