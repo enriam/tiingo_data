@@ -31,11 +31,11 @@ class TiingoRESTClient:
     raise TiingoError instead of emitting warnings and continuing.
     """
 
-    _tii_test = "https://api.tiingo.com/api/test/"
-    _tii_eod = "https://api.tiingo.com/tiingo/daily/"
-    _tii_iex = "https://api.tiingo.com/iex/"
+    _AUTH_TEST_URL = "https://api.tiingo.com/api/test/"
+    _EOD_BASE_URL = "https://api.tiingo.com/tiingo/daily/"
+    _IEX_BASE_URL = "https://api.tiingo.com/iex/"
 
-    _tii_eod_cols = (
+    _EOD_COLUMNS = (
         "open",
         "high",
         "low",
@@ -49,8 +49,8 @@ class TiingoRESTClient:
         "divCash",
         "splitFactor",
     )
-    _tii_iex_hist_cols = ("open", "high", "low", "close", "volume")
-    _tii_iex_last_cols = (
+    _IEX_HISTORICAL_COLUMNS = ("open", "high", "low", "close", "volume")
+    _IEX_LATEST_COLUMNS = (
         "timestamp",
         "quoteTimestamp",
         "lastSaleTimestamp",
@@ -68,8 +68,8 @@ class TiingoRESTClient:
         "askSize",
         "askPrice",
     )
-    _tii_resample_freqs = ("daily", "weekly", "monthly", "annually")
-    _tii_resample_pattern = re.compile(r"[1-9][0-9]*(?:min|hour)")
+    _EOD_FREQUENCIES = ("daily", "weekly", "monthly", "annually")
+    _INTRADAY_FREQUENCY_PATTERN = re.compile(r"[1-9][0-9]*(?:min|hour)")
     _retry_statuses = (429, 500, 502, 503, 504)
 
     def __init__(
@@ -193,7 +193,7 @@ class TiingoRESTClient:
         return payload
 
     def _validate_token(self) -> None:
-        payload = self._get_json(self._tii_test)
+        payload = self._get_json(self._AUTH_TEST_URL)
         message = payload.get("message") if isinstance(payload, dict) else None
         if message != "You successfully sent a request":
             detail = self._redact(message or "unexpected response")
@@ -244,9 +244,9 @@ class TiingoRESTClient:
             raise TiingoError("columns must be a sequence of column names.")
 
         valid_names_by_endpoint = {
-            "eod": self._tii_eod_cols,
-            "iex_last": self._tii_iex_last_cols,
-            "iex_hist": self._tii_iex_hist_cols,
+            "eod": self._EOD_COLUMNS,
+            "iex_last": self._IEX_LATEST_COLUMNS,
+            "iex_hist": self._IEX_HISTORICAL_COLUMNS,
         }
         try:
             valid_names = valid_names_by_endpoint[endpoint]
@@ -308,7 +308,9 @@ class TiingoRESTClient:
         if not isinstance(ticker, str):
             raise TiingoError("ticker must be a string.")
         ticker = self._normalize_tickers(ticker)[0]
-        payload = self._get_json(f"{self._tii_eod}{quote(ticker, safe='')}")
+        payload = self._get_json(
+            f"{self._EOD_BASE_URL}{quote(ticker, safe='')}"
+        )
         if not isinstance(payload, dict):
             raise TiingoError(
                 "Tiingo returned an unexpected metadata response "
@@ -329,18 +331,18 @@ class TiingoRESTClient:
 
         if not isinstance(frequency, str):
             raise TiingoError("frequency must be a string.")
-        if self._tii_resample_pattern.fullmatch(frequency):
-            endpoint = self._tii_iex
+        if self._INTRADAY_FREQUENCY_PATTERN.fullmatch(frequency):
+            endpoint = self._IEX_BASE_URL
             endpoint_name = "iex_hist"
-            default_columns = self._tii_iex_hist_cols
-        elif frequency in self._tii_resample_freqs:
-            endpoint = self._tii_eod
+            default_columns = self._IEX_HISTORICAL_COLUMNS
+        elif frequency in self._EOD_FREQUENCIES:
+            endpoint = self._EOD_BASE_URL
             endpoint_name = "eod"
-            default_columns = self._tii_eod_cols
+            default_columns = self._EOD_COLUMNS
         else:
             raise TiingoError(
                 f'Invalid resample frequency: "{frequency}". '
-                f"Valid end-of-day values are {self._tii_resample_freqs}; "
+                f"Valid end-of-day values are {self._EOD_FREQUENCIES}; "
                 "intraday values include 5min, 15min, 1hour, and 4hour."
             )
 
@@ -412,7 +414,7 @@ class TiingoRESTClient:
         if valid_columns:
             params["columns"] = ",".join(valid_columns)
 
-        response = self._get(self._tii_iex, params=params)
+        response = self._get(self._IEX_BASE_URL, params=params)
         try:
             frame = pd.read_csv(StringIO(response.text))
         except (
