@@ -152,12 +152,17 @@ class TiingoRESTClient:
         return str(value).replace(self._token, "<redacted>")
 
     def _get(
-        self, url: str, *, params: Mapping[str, str] | None = None
+        self,
+        url: str,
+        *,
+        params: Mapping[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> requests.Response:
         try:
             response = self._session.get(
                 url,
                 params=params,
+                headers=headers,
                 timeout=self._timeout,
             )
             response.raise_for_status()
@@ -179,9 +184,13 @@ class TiingoRESTClient:
         return response
 
     def _get_json(
-        self, url: str, *, params: Mapping[str, str] | None = None
+        self,
+        url: str,
+        *,
+        params: Mapping[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
     ) -> JSON:
-        response = self._get(url, params=params)
+        response = self._get(url, params=params, headers=headers)
         try:
             payload = response.json()
         except (TypeError, ValueError) as exc:
@@ -193,7 +202,10 @@ class TiingoRESTClient:
         return payload
 
     def _validate_token(self) -> None:
-        payload = self._get_json(self._AUTH_TEST_URL)
+        payload = self._get_json(
+            self._AUTH_TEST_URL,
+            headers={"Content-Type": "application/json"},
+        )
         message = payload.get("message") if isinstance(payload, dict) else None
         if message != "You successfully sent a request":
             detail = self._redact(message or "unexpected response")

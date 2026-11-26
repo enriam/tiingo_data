@@ -29,9 +29,15 @@ class FakeSession:
         self.calls = []
         self.closed = False
 
-    def get(self, url, *, params=None, timeout=None):
+    def get(self, url, *, params=None, timeout=None, headers=None):
+        request_headers = self.headers | (headers or {})
         self.calls.append(
-            {"url": url, "params": params, "timeout": timeout}
+            {
+                "url": url,
+                "params": params,
+                "timeout": timeout,
+                "headers": request_headers,
+            }
         )
         response = self.responses.pop(0)
         if isinstance(response, Exception):
@@ -69,9 +75,24 @@ class TiingoRESTClientTests(unittest.TestCase):
         )
         self.assertIsNone(session.calls[0]["params"])
         self.assertEqual(
-            session.headers["Authorization"],
+            session.calls[0]["headers"]["Authorization"],
             f"Token {self.token}",
         )
+
+    def test_token_validation_sends_json_content_type_only_for_auth_check(self):
+        auth = FakeResponse(
+            payload={"message": "You successfully sent a request"}
+        )
+        metadata = FakeResponse(payload={"ticker": "SPY"})
+        session = FakeSession([auth, metadata])
+        client = TiingoRESTClient(self.token, session=session)
+
+        client.get_stock_metadata("SPY")
+
+        self.assertEqual(
+            session.calls[0]["headers"].get("Content-Type"), "application/json"
+        )
+        self.assertNotIn("Content-Type", session.calls[1]["headers"])
 
     def test_http_error_does_not_expose_token(self):
         client, _ = self.make_client(
